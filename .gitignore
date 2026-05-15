@@ -1,0 +1,14 @@
+# Môi trường ảo Python
+venv/
+env/
+
+# Cache của Python
+__pycache__/
+*.pyc
+
+# File chứa biến môi trường (Bảo mật)
+.env
+
+# Thư mục dữ liệu của AI/Vector DB (nếu có sau này)
+chroma_data/
+.claude/
