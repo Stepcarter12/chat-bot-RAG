@@ -22,5 +22,10 @@ app.include_router(router, prefix="/api/v1")
 
 
 @app.get("/health")
-async def health_check() -> dict[str, str]:
-    return {"status": "ok"}
+async def health_check() -> dict:
+    return {
+        "status": "ok",
+        "version": "1.0.0",
+        "llm_model": "llama-3.1-8b-instant",
+        "vector_store": "chromadb",
+    }
