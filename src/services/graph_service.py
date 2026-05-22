@@ -27,10 +27,10 @@ _llm = ChatGroq(
 _prompt = ChatPromptTemplate.from_messages([
     (
         "system",
-        "Bạn là một trợ lý thông minh. "
-        "Sử dụng nội dung trong phần [Context] để trả lời câu hỏi. "
-        "Nếu thông tin không có trong [Context], hãy trả lời dựa trên kiến thức chung "
-        "nhưng phải trung thực.\n\n"
+        "You are a smart assistant. "
+        "Use the content in [Context] to answer the question. "
+        "If the information is not in [Context], answer based on general knowledge but be honest.\n"
+        "Always respond in the same language as the user's question.\n\n"
         "[Context]\n{context}",
     ),
     ("placeholder", "{messages}"),
@@ -40,12 +40,11 @@ _prompt = ChatPromptTemplate.from_messages([
 _classifier_prompt = ChatPromptTemplate.from_messages([
     (
         "system",
-        "Xác định xem câu hỏi sau có cần tra cứu tài liệu không. "
-        "Trả lời đúng một từ: 'yes' hoặc 'no'.\n"
-        "Cần tra cứu (trả lời 'yes'): tóm tắt tài liệu, giải thích khái niệm trong tài liệu, "
-        "câu hỏi về nội dung cụ thể, sản phẩm, chính sách, dữ liệu, định nghĩa, ví dụ.\n"
-        "Không cần (trả lời 'no'): chào hỏi thông thường, toán học đơn giản, "
-        "câu hỏi không liên quan đến tài liệu nào.",
+        "Determine if the following question requires looking up information from documents. "
+        "Answer with exactly one word: 'yes' or 'no'.\n"
+        "Answer 'yes' for: summarize document, explain concept, questions about specific "
+        "content, definitions, examples, product info, policies, data lookup.\n"
+        "Answer 'no' for: greetings, simple math, questions clearly unrelated to any document.",
     ),
     ("human", "{query}"),
 ])
@@ -55,6 +54,7 @@ class ChatbotState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     context: str
     needs_retrieval: bool
+    embedding_type: str
 
 
 def question_classifier_node(state: ChatbotState) -> dict:
@@ -87,8 +87,9 @@ def retrieval_node(state: ChatbotState) -> dict:
     )
     if last_human is None:
         return {"context": ""}
-    context = retrieve_context(str(last_human.content))
-    _logger.info("Truy xuất context: %d ký tự", len(context))
+    embedding_type = state.get("embedding_type", "en")
+    context = retrieve_context(str(last_human.content), embedding_type=embedding_type)
+    _logger.info("Truy xuất context: %d ký tự (embedding_type=%s)", len(context), embedding_type)
     return {"context": context}
 
 

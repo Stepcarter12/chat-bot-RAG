@@ -1,6 +1,12 @@
 import sys
 from pathlib import Path
 
+# Khi chạy trực tiếp qua subprocess, project root chưa có trong sys.path —
+# thêm vào để 'src.' import hoạt động đúng
+_PROJECT_ROOT_INIT = Path(__file__).parent.parent.parent
+if str(_PROJECT_ROOT_INIT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT_INIT))
+
 # Buộc stdout dùng UTF-8 để tránh UnicodeEncodeError trên Windows (cp1252)
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
@@ -18,10 +24,11 @@ from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from src.retrieval.vector_store import EMBEDDING_CONFIGS
+
 # Tính đường dẫn tuyệt đối từ vị trí file, không phụ thuộc vào thư mục gọi lệnh
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
 _DOCS_DATA_DIR = str(_PROJECT_ROOT / "docs" / "data")
-_CHROMA_DIR = str(_PROJECT_ROOT / "chroma_data")
 
 # Cấu hình từng loại file: glob pattern → (loader class, kwargs)
 _LOADERS: dict = {
@@ -45,8 +52,17 @@ def _load_excel(file_path: Path) -> list[Document]:
     return docs
 
 
-def ingest_documents(docs_dir: str = _DOCS_DATA_DIR) -> None:
-    """Nạp tài liệu từ docs/data (txt, pdf, docx, csv, xlsx) vào ChromaDB."""
+def run_ingestion(
+    chunk_size: int = 500,
+    chunk_overlap: int = 50,
+    docs_dir: str = _DOCS_DATA_DIR,
+    embedding_type: str = "en",
+) -> list[str]:
+    """Nạp tài liệu từ docs/data vào ChromaDB và trả về danh sách text của các chunks."""
+    if embedding_type not in EMBEDDING_CONFIGS:
+        raise ValueError(f"embedding_type không hợp lệ: '{embedding_type}'. Chọn: {list(EMBEDDING_CONFIGS)}")
+
+    model_name, chroma_dir, collection_name = EMBEDDING_CONFIGS[embedding_type]
     data_path = Path(docs_dir)
     all_documents: list[Document] = []
 
@@ -68,31 +84,35 @@ def ingest_documents(docs_dir: str = _DOCS_DATA_DIR) -> None:
 
     if not all_documents:
         print(f"Không tìm thấy tài liệu nào trong '{docs_dir}'.")
-        return
+        return []
 
-    print(f"Tìm thấy {len(all_documents)} tài liệu thô. Đang chunk...")
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    print(
+        f"Tìm thấy {len(all_documents)} tài liệu thô. "
+        f"Đang chunk (size={chunk_size}, overlap={chunk_overlap}, model={model_name})..."
+    )
+    splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     chunks = splitter.split_documents(all_documents)
 
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(model_name=model_name)
 
     # Xóa collection cũ trước khi nạp lại để tránh duplicate
     _old = Chroma(
-        collection_name="knowledge_base",
+        collection_name=collection_name,
         embedding_function=embeddings,
-        persist_directory=_CHROMA_DIR,
+        persist_directory=chroma_dir,
     )
     _old.delete_collection()
 
     Chroma.from_documents(
         documents=chunks,
         embedding=embeddings,
-        collection_name="knowledge_base",
-        persist_directory=_CHROMA_DIR,
+        collection_name=collection_name,
+        persist_directory=chroma_dir,
     )
 
-    print(f"Đã nạp thành công {len(chunks)} chunks vào ChromaDB.")
+    print(f"Đã nạp thành công {len(chunks)} chunks vào ChromaDB ({collection_name}).")
+    return [chunk.page_content for chunk in chunks]
 
 
 if __name__ == "__main__":
-    ingest_documents()
+    run_ingestion()
