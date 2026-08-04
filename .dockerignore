@@ -1,0 +1,44 @@
+# ── .dockerignore — Loại bỏ file không cần thiết khi build Docker image ──────
+
+# Môi trường ảo Python (không cần — Docker cài lại trong image)
+venv/
+.venv/
+env/
+
+# Secrets — KHÔNG BAO GIỜ đưa vào image
+.env
+
+# Dữ liệu ChromaDB — mount qua volumes, không copy vào image
+chroma_data_en/
+chroma_data_vi/
+
+# Git
+.git/
+.gitignore
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Mypy / Flake8 cache
+.mypy_cache/
+.flake8
+
+# Tài liệu không cần trong runtime image
+*.md
+docs/process/
+docs/project/
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage

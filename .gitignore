@@ -1,14 +1,32 @@
 # Môi trường ảo Python
 venv/
 env/
+.venv/
 
 # Cache của Python
 __pycache__/
 *.pyc
+*.pyo
 
-# File chứa biến môi trường (Bảo mật)
+# File chứa biến môi trường (Bảo mật — KHÔNG commit .env)
 .env
 
-# Thư mục dữ liệu của AI/Vector DB (nếu có sau này)
+# Thư mục dữ liệu ChromaDB (tạo tự động khi ingest)
 chroma_data/
+chroma_data_en/
+chroma_data_vi/
+
+# Claude Code
 .claude/
+
+# Mypy cache
+.mypy_cache/
+
+# Phase 9: Docker data volumes (tạo tự động bởi docker compose)
+postgres_data/
+
+# Tài liệu thô người dùng upload (không commit dữ liệu khách hàng)
+docs/data/
+
+# Google Service Account credentials (bảo mật — KHÔNG commit)
+google_credentials.json

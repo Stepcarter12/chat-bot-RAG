@@ -1,0 +1,112 @@
+# ── Phase 9: Docker Compose stack ────────────────────────────────────────────
+# Services:
+#   postgres  — LangGraph checkpoint storage (PostgresSaver)
+#   redis     — Celery message broker + result backend
+#   api       — FastAPI: webhook receiver + REST API
+#   worker    — Celery worker: xử lý RAG async
+#   flower    — Celery monitoring dashboard (port 5555)
+#   streamlit — Frontend (port 8501)
+#
+# Khởi động toàn bộ:
+#   docker compose up --build
+#
+# Chỉ khởi động backend (không có Streamlit):
+#   docker compose up --build postgres redis api worker flower
+
+services:
+
+  # ── PostgreSQL: lưu LangGraph checkpoints bền vững ─────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Redis: Celery broker + result backend ───────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ── FastAPI: tiếp nhận webhook + REST API ──────────────────────────────────
+  api:
+    build: .
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8080 --workers 2
+    env_file: .env
+    ports:
+      - "8081:8080"
+    volumes:
+      # Mount docs và ChromaDB để persist data ngoài container
+      - ./docs:/app/docs
+      - ./chroma_data_en:/app/chroma_data_en
+      - ./chroma_data_vi:/app/chroma_data_vi
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Celery Worker: xử lý RAG pipeline async ────────────────────────────────
+  # concurrency=2: 2 task song song, tăng nếu cần nhiều throughput hơn
+  worker:
+    build: .
+    command: celery -A src.services.celery_app worker --loglevel=info --concurrency=2 --max-tasks-per-child=100
+    env_file: .env
+    volumes:
+      - ./docs:/app/docs
+      - ./chroma_data_en:/app/chroma_data_en
+      - ./chroma_data_vi:/app/chroma_data_vi
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Flower: dashboard theo dõi Celery tasks ─────────────────────────────────
+  # Truy cập: http://localhost:5555
+  flower:
+    build: .
+    command: celery -A src.services.celery_app flower --port=5555 --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-changeme}
+    env_file: .env
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # ── Streamlit: frontend web UI ──────────────────────────────────────────────
+  # Truy cập: http://localhost:8501
+  streamlit:
+    build: .
+    command: streamlit run src/frontend/app.py --server.port 8501 --server.address 0.0.0.0
+    env_file: .env
+    environment:
+      # Ghi đè URL để dùng Docker service name thay vì localhost
+      API_BASE_URL: http://api:8080
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

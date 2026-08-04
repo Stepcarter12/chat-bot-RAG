@@ -1,0 +1,161 @@
+================================================================
+  CÁC LỆNH THƯỜNG DÙNG — AI CHATBOT PROJECT
+================================================================
+
+
+================================================================
+  1. KHỞI ĐỘNG HỆ THỐNG
+================================================================
+
+--- Không dùng Docker (mở 2 terminal riêng) ---
+
+  Terminal 1 — Backend (FastAPI):
+    uvicorn src.main:app --reload --port 8080
+
+  Terminal 2 — Frontend (Streamlit):
+    streamlit run src/frontend/app.py
+
+
+--- Dùng Docker (chỉ cần 1 terminal) ---
+
+  Lần đầu — sao chép file cấu hình:
+    cp .env.example .env
+    (Điền GROQ_API_KEY, FB_VERIFY_TOKEN, FB_APP_SECRET, FB_PAGE_ACCESS_TOKEN vào .env)
+
+  Build và chạy toàn bộ hệ thống:
+    docker compose up --build
+
+  Chạy lại (không rebuild):
+    docker compose up
+
+  Dừng tất cả:
+    docker compose down
+
+
+================================================================
+  2. ĐỊA CHỈ TRUY CẬP SAU KHI CHẠY
+================================================================
+
+  Streamlit UI         →  http://localhost:8501
+  FastAPI (API)        →  http://localhost:8080
+  FastAPI Swagger Docs →  http://localhost:8080/docs
+  Health Check         →  http://localhost:8080/health
+  Flower (Celery)      →  http://localhost:5555
+
+
+================================================================
+  3. NẠP TÀI LIỆU VÀO KNOWLEDGE BASE
+================================================================
+
+  ⚠️  LƯU Ý: Tài liệu tiếng Việt phải ingest với "vi" và chat
+      cũng phải chọn "vi". Nếu không khớp, bot sẽ không có context.
+
+--- Cách 1: Qua Streamlit UI (dễ nhất) ---
+
+  1. Mở http://localhost:8501
+  2. Sidebar → "📁 Quản lý File Tài Liệu" → upload file
+     (hỗ trợ: .txt, .pdf, .docx, .csv, .xlsx)
+  3. Chọn ngôn ngữ đúng với tài liệu (Tiếng Việt / Tiếng Anh)
+  4. Nhấn "⚡ Nạp vào Knowledge Base"
+  5. Chat thử ngay trong giao diện
+
+
+--- Cách 2: Thủ công qua Terminal ---
+
+  Bước 1 — Copy file vào docs/data/:
+    Copy-Item "C:\đường\dẫn\tailieu.txt" "docs\data\"
+
+    (Hoặc tạo file test nhanh:)
+    "Nội dung test." | Out-File -FilePath "docs\data\test.txt" -Encoding utf8
+
+  Bước 2 — Khởi động backend (nếu chưa chạy):
+    uvicorn src.main:app --reload --port 8080
+
+  Bước 3 — Gọi API ingest:
+
+    Tài liệu TIẾNG VIỆT:
+      curl -X POST http://localhost:8080/api/v1/ingest `
+        -H "Content-Type: application/json" `
+        -d '{"chunk_size": 500, "chunk_overlap": 50, "embedding_type": "vi"}'
+
+    Tài liệu TIẾNG ANH:
+      curl -X POST http://localhost:8080/api/v1/ingest `
+        -H "Content-Type: application/json" `
+        -d '{"chunk_size": 500, "chunk_overlap": 50, "embedding_type": "en"}'
+
+    → Response trả về danh sách chunks — kiểm tra nội dung có đúng không.
+
+  Bước 4 — Chat thử để xác nhận RAG hoạt động:
+    curl -X POST http://localhost:8080/api/v1/chat `
+      -H "Content-Type: application/json" `
+      -d '{"query": "nội dung tài liệu là gì?", "thread_id": "test-001", "embedding_type": "vi"}'
+
+
+--- Cách 3: Chạy ingest trực tiếp (không cần server) ---
+
+    python -m src.retrieval.ingest
+
+
+================================================================
+  4. TEST & KIỂM TRA
+================================================================
+
+  Health check:
+    curl http://localhost:8080/health
+
+  Gửi câu hỏi chat:
+    curl -X POST http://localhost:8080/api/v1/chat `
+      -H "Content-Type: application/json" `
+      -d '{"query": "xin chào", "thread_id": "test-1", "embedding_type": "vi"}'
+
+  Liệt kê file tài liệu hiện có:
+    curl http://localhost:8080/api/v1/files
+
+
+================================================================
+  5. CELERY (chỉ dùng khi test ngoài Docker trên Windows)
+================================================================
+
+  Khởi động Worker (Windows bắt buộc dùng --pool=solo):
+    celery -A src.services.celery_app worker --pool=solo --loglevel=info
+
+  Khởi động Flower monitor:
+    celery -A src.services.celery_app flower
+
+
+================================================================
+  6. MÔI TRƯỜNG PYTHON
+================================================================
+
+  Cài dependencies:
+    pip install -r requirements.txt
+
+  Cài torch CPU-only (nhẹ hơn, không cần GPU/CUDA):
+    pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+  Kiểm tra linting:
+    flake8 src/
+
+  Kiểm tra type:
+    mypy src/
+
+
+================================================================
+  7. DOCKER — LỆNH TIỆN ÍCH
+================================================================
+
+  Xem trạng thái containers:
+    docker compose ps
+
+  Xem log của một service:
+    docker compose logs api
+    docker compose logs worker
+    docker compose logs streamlit
+
+  Theo dõi log realtime:
+    docker compose logs -f worker
+
+  Rebuild chỉ một service:
+    docker compose up --build api
+
+================================================================

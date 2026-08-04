@@ -1,0 +1,61 @@
+# ── docker-compose.prod.yml — Production override ─────────────────────────────
+#
+# Dùng chung với base file:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# File này thêm:
+#   - nginx: reverse proxy với SSL termination (port 80 + 443)
+#   - certbot: auto-renew Let's Encrypt certificate mỗi 12h
+#
+# Về port nội bộ (8081, 8501, 5555, 5432, 6379):
+#   docker-compose.yml vẫn expose chúng (cần cho dev local).
+#   Trên VPS production, chặn bằng UFW:
+#     ufw allow 22   # SSH
+#     ufw allow 80   # nginx HTTP
+#     ufw allow 443  # nginx HTTPS
+#     ufw enable
+#   Các port khác mặc định bị block — không cần xóa khỏi docker-compose.
+#
+# Yêu cầu trước khi chạy:
+#   1. Đã trỏ DNS A record của YOUR_DOMAIN về IP VPS
+#   2. Đã lấy cert Let's Encrypt (xem deployment guide trong project-plan.md)
+#   3. Đã thay YOUR_DOMAIN trong nginx/default.conf
+
+services:
+
+  # ── Nginx: reverse proxy + SSL termination ─────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Config nginx (read-only để tránh thay đổi ngoài ý muốn)
+      - ./nginx:/etc/nginx/conf.d:ro
+      # Webroot cho certbot challenge (dùng chung với certbot service)
+      - ./certbot/www:/var/www/certbot:ro
+      # Certificates từ Let's Encrypt (read-only)
+      - ./certbot/conf:/etc/letsencrypt:ro
+    depends_on:
+      - api
+      - streamlit
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Certbot: tự động renew certificate mỗi 12 giờ ─────────────────────────
+  # Dùng webroot method: certbot ghi challenge vào /var/www/certbot,
+  # nginx serve thư mục đó qua /.well-known/acme-challenge/
+  # → Không cần restart nginx khi renew
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+    # Vòng lặp renew: chạy certbot renew, sleep 12h, lặp lại
+    # $${!} là PID của sleep — dùng wait để Ctrl+C hoạt động đúng
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done'"
+    restart: unless-stopped

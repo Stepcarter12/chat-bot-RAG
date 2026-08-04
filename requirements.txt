@@ -19,3 +19,30 @@ flake8
 mypy
 streamlit
 requests
+
+# ── Phase 9: Async task queue ────────────────────────────────────────────────
+celery[redis]>=5.3.6
+redis>=4.6.0
+flower>=2.0.0
+
+# ── Phase 9: PostgreSQL driver v3 (bắt buộc cho PostgresSaver) ──────────────
+# Dùng psycopg v3 (KHÔNG phải psycopg2) vì PostgresSaver cần psycopg_pool
+# và psycopg.rows.dict_row
+# ⚠️ langgraph-checkpoint-postgres yêu cầu psycopg>=3.2.0
+psycopg[binary,pool]>=3.2.0
+
+# ── Phase 9: LangGraph checkpoint lưu vào PostgreSQL ────────────────────────
+langgraph-checkpoint-postgres>=2.0.6
+
+# ── Phase 9: HTTP client cho Celery worker gọi Facebook Graph API ────────────
+httpx>=0.27.0
+
+# ── Phase 10: Advanced RAG ───────────────────────────────────────────────────
+# SemanticChunker — cắt văn bản theo ranh giới ngữ nghĩa thay vì kích thước cố định
+langchain-experimental
+# BM25 (Okapi BM25) — sparse retrieval cho Hybrid Search
+rank-bm25
+
+# ── Google Sheets integration ────────────────────────────────────────────────
+gspread>=6.0.0
+google-auth>=2.0.0
